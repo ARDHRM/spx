@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>&lt;ARDHRM SPX-WAYBILL&gt;</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <!-- JsBarcode Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+    <!-- QRCodeJS Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Mencegah scroll pada body */
+        }
+        .thermal-text {
+            font-family: 'Inter', sans-serif;
+            letter-spacing: -0.3px;
+        }
+        .barcode-text {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .dashed-line {
+            border-bottom: 2px dashed #000;
+        }
+        /* Custom scrollbar untuk panel kiri */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 10px;
+        }
+        /* Area Kanvas / Dragging */
+        #canvas-container {
+            cursor: grab;
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        #canvas-container:active {
+            cursor: grabbing;
+        }
+        /* Pembungkus Resi */
+        #resi-wrapper {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(1);
+            transform-origin: center;
+            user-select: none; /* Mencegah teks terblok saat ditarik */
+        }
+        /* Resi Kertas */
+        .resi-paper {
+            width: 500px;
+            background: white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            color: black;
+        }
+    </style>
+</head>
+<body class="flex h-screen w-full">
+
+    <!-- Panel Form (Kiri) -->
+    <div class="w-80 bg-white h-full shadow-xl flex flex-col z-10 relative">
+        <div class="p-4 border-b bg-gray-50 flex items-center justify-between">
+            <h1 class="text-xl font-extrabold text-orange-600 tracking-tight">SpxWaybill</h1>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            
+            <!-- Pengaturan Kanvas -->
+            <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
+                <h3 class="text-xs font-bold text-blue-800 mb-2 uppercase">Pengaturan Kanvas</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Zoom Resi</label>
+                        <input type="range" id="in-zoom" min="0.5" max="2" step="0.1" value="1" class="w-full accent-blue-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Background Image</label>
+                        <input type="file" id="in-bg" accept="image/*" class="w-full text-xs text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200">
+                    </div>
+                    <button id="btn-reset" class="w-full bg-white border border-gray-300 text-gray-700 text-xs py-1.5 rounded font-semibold hover:bg-gray-100 transition">Reset Posisi & Zoom</button>
+                </div>
+            </div>
+
+            <!-- Input Data Resi -->
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Nomer Resi</label>
+                <input type="text" id="in-resi" value="SPXID06112645177A" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div class="flex gap-2">
+                <div class="w-1/2">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Layanan</label>
+                    <input type="text" id="in-layanan" value="ECO" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:outline-none focus:border-orange-500">
+                </div>
+                <div class="w-1/2">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Rute Atas</label>
+                    <input type="text" id="in-rute" value="PUL-C-01" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:outline-none focus:border-orange-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Kode Wilayah</label>
+                <input type="text" id="in-wilayah" value="CI-11" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div class="border-t pt-3 mt-2">
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Nama Penerima</label>
+                <input type="text" id="in-penerima-nama" value="Hermadi Wibu" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Tipe Alamat (Penerima)</label>
+                <input type="text" id="in-tipe-alamat" value="HOME" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Alamat Lengkap Penerima</label>
+                <textarea id="in-penerima-alamat" rows="3" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500">Dukuh Tambang, RT.4/RW.1 DESA TAMBANG, PUDAK, KAB. PONOROGO, JAWA TIMUR</textarea>
+            </div>
+
+            <div class="border-t pt-3 mt-2">
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Nama Pengirim</label>
+                <input type="text" id="in-pengirim-nama" value="JoyyStore_" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Nomor Telp Pengirim</label>
+                <input type="text" id="in-pengirim-telp" value="6283182285023" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Kota Pengirim</label>
+                <input type="text" id="in-pengirim-kota" value="KOTA JAKARTA BARAT" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div class="border-t pt-3 mt-2">
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Kode Blok Hitam</label>
+                <input type="text" id="in-blok" value="Halim Perdana Kusuma-18" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div class="flex gap-2 mt-2">
+                <div class="w-1/3">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Kabupaten</label>
+                    <input type="text" id="in-kab" value="KAB. PONOROGO" class="w-full border border-gray-300 rounded px-2 py-1 text-xs uppercase focus:outline-none focus:border-orange-500">
+                </div>
+                <div class="w-1/3">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Kecamatan</label>
+                    <input type="text" id="in-kec" value="PUDAK" class="w-full border border-gray-300 rounded px-2 py-1 text-xs uppercase focus:outline-none focus:border-orange-500">
+                </div>
+                <div class="w-1/3">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Kolom Kanan</label>
+                    <input type="text" id="in-kanan" value="TAMBANG" class="w-full border border-gray-300 rounded px-2 py-1 text-xs uppercase focus:outline-none focus:border-orange-500">
+                </div>
+            </div>
+
+            <div class="flex gap-2 border-t pt-3 mt-2">
+                <div class="w-1/2">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Berat</label>
+                    <input type="text" id="in-berat" value="100 gr" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500">
+                </div>
+                <div class="w-1/2">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Batas Kirim</label>
+                    <input type="text" id="in-batas" value="30-10-2026" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-orange-500">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">No. Pesanan</label>
+                <input type="text" id="in-pesanan" value="2610300W2NHQT2" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm uppercase focus:outline-none focus:border-orange-500">
+            </div>
+
+            <div class="pb-6">
+                <label class="block text-xs font-semibold text-gray-700 mb-1">COD Cek Dulu</label>
+                <select id="in-cod" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-semibold focus:outline-none focus:border-orange-500">
+                    <option value="Ya">Ya</option>
+                    <option value="Tidak" selected>Tidak</option>
+                </select>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Area Kanvas (Kanan) -->
+    <div id="canvas-container" class="flex-1">
+        
+        <!-- RESI WRAPPER (Untuk Drag & Drop) -->
+        <div id="resi-wrapper">
+            <div class="resi-paper p-1 relative border border-gray-300">
+                <div class="border-[2px] border-black p-1 thermal-text relative">
+                    
+                    <!-- Resi Text Tepi Kiri & Kanan -->
+                    <div class="absolute -left-1 top-24 -rotate-90 origin-left text-[8px] font-bold tracking-wider" id="disp-resi-kiri">SPXID06112645177A</div>
+                    <div class="absolute -right-24 top-24 -rotate-90 origin-left text-[8px] font-bold tracking-wider" id="disp-resi-kanan">SPXID06112645177A</div>
+                    
+                    <!-- Text Resi Mungil Atas -->
+                    <div class="flex justify-between px-6 text-[9px] font-bold mb-1">
+                        <span id="disp-resi-atas1">SPXID06112645177A</span>
+                        <span id="disp-resi-atas2">SPXID06112645177A</span>
+                        <span id="disp-resi-atas3">SPXID06112645177A</span>
+                    </div>
+
+                    <!-- Header Row -->
+                    <div class="flex justify-between items-center px-2 pb-1 border-b-[2px] border-black">
+                        <div class="flex items-center px-1 py-0.5 bg-white">
+                            <svg viewBox="0 0 2048 2048" class="w-[26px] h-[26px] mr-1" fill="black">
+                                <path d="M1491 581A467 467 0 0 0 1024 114a467 467 0 0 0-467 467H36L130 1782c5 83 75 152 158 152h1472c83 0 153-69 158-152l94-1201h-521zm-467-336c189 0 334 153 334 336H690c0-183 145-336 334-336zm44 1162c-237 0-388-111-388-301h142c0 120 100 180 236 180 129 0 216-56 216-146 0-217-434-150-434-406 0-142 121-274 345-274 213 0 353 103 361 278h-138c-10-101-94-150-218-150-120 0-205 52-205 137 0 205 434 140 434 397 0 162-132 285-351 285z"/>
+                            </svg>
+                            <span class="font-bold text-[19px] tracking-tight">Shopee</span>
+                        </div>
+                        <div class="text-3xl font-black tracking-tighter uppercase" id="disp-layanan">ECO</div>
+                        <div class="font-black italic text-4xl tracking-tighter pr-4">SPX</div>
+                    </div>
+
+                    <!-- Barcode Section Row -->
+                    <div class="flex border-b-[2px] border-black">
+                        <!-- Kotak CI-11 -->
+                        <div class="w-[35%] border-r-[2px] border-black flex items-center justify-center p-4">
+                            <span class="text-5xl font-bold tracking-tighter uppercase" id="disp-wilayah">CI-11</span>
+                        </div>
+                        
+                        <!-- Rute & Barcode Utama -->
+                        <div class="w-[65%] flex flex-col">
+                            <div class="flex border-b-[2px] border-black">
+                                <div class="w-1/2 border-r-[2px] border-black flex items-center justify-center py-1 bg-white">
+                                    <span class="font-bold text-lg uppercase" id="disp-rute">PUL-B-03</span>
+                                </div>
+                                <div class="w-1/2 flex items-center justify-center py-1 overflow-hidden">
+                                    <span class="font-bold text-[13px] tracking-tight whitespace-nowrap" id="disp-resi-teks">Resi: SPXID06112645177A</span>
+                                </div>
+                            </div>
+                            <div class="flex-1 flex flex-col items-center justify-center pt-3 pb-1">
+                                <svg id="main-barcode" class="w-[90%] h-[70px]"></svg>
+                                <span class="text-[11px] font-bold mt-1" id="disp-resi-bawah-barcode">SPXID06112645177A</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Info Pengirim & Penerima -->
+                    <div class="flex px-1 pt-1 pb-4 relative">
+                        <div class="w-1/2 pr-2">
+                            <div class="font-bold text-[13px] leading-tight">Penerima: <span id="disp-penerima-nama">alvin ferdianto</span></div>
+                            <div class="border-[1.5px] border-black inline-block px-2 py-0.5 mt-1 mb-1 font-bold text-[13px]" id="disp-tipe-alamat">HOME</div>
+                            <div class="text-[13px] leading-tight mt-1" id="disp-penerima-alamat">Jalan Desa Bareng, RT.1/RW.1, Tajem, Pudak, PUDAK, KAB. PONOROGO, JAWA TIMUR</div>
+                        </div>
+                        <div class="w-1/2 pl-6">
+                            <div class="font-bold text-[13px] leading-tight">Pengirim: <span id="disp-pengirim-nama">JoyyStore_</span></div>
+                            <div class="text-[13px] font-bold mt-1" id="disp-pengirim-telp">6283182285023</div>
+                            <div class="text-[13px] mt-0.5 uppercase" id="disp-pengirim-kota">KOTA JAKARTA BARAT</div>
+                        </div>
+                    </div>
+
+                    <!-- Blok Hitam Kanan -->
+                    <div class="flex justify-end mb-1">
+                        <div class="bg-gray-800 text-white font-bold text-sm px-3 py-1 mr-2" id="disp-blok">Halim Perdana Kusuma-18</div>
+                    </div>
+
+                    <!-- Grid Lokasi Bawah -->
+                    <div class="grid grid-cols-3 border-y-[2px] border-black text-center font-bold text-sm">
+                        <div class="border-r-[2px] border-black py-1 uppercase" id="disp-kab">KAB. PONOROGO</div>
+                        <div class="border-r-[2px] border-black py-1 uppercase" id="disp-kec">PUDAK</div>
+                        <div class="py-1 uppercase" id="disp-kanan"></div>
+                    </div>
+
+                    <!-- Footer Info -->
+                    <div class="flex px-1 pt-2 pb-1 relative">
+                        <div class="absolute -left-4 bottom-12 -rotate-90 origin-left text-[8px] font-bold tracking-wider" id="disp-resi-kiri-bawah">SPXID06112645177A</div>
+                        <div class="absolute -right-24 bottom-12 -rotate-90 origin-left text-[8px] font-bold tracking-wider" id="disp-resi-kanan-bawah">SPXID06112645177A</div>
+                        
+                        <div class="w-[60%] space-y-0.5">
+                            <div class="flex text-[14px]"><span class="w-24 font-bold">Berat:</span><span id="disp-berat" class="font-bold">100 gr</span></div>
+                            <div class="flex text-[14px]"><span class="w-24 font-bold">Batas Kirim:</span><span id="disp-batas">30-10-2026</span></div>
+                            <div class="flex text-[14px]"><span class="w-24 font-bold">No. Pesanan:</span><span id="disp-pesanan" class="font-bold">2610300W2NHQT2</span></div>
+                            
+                            <!-- Barcode Pesanan -->
+                            <div class="mt-2 ml-2">
+                                <svg id="small-barcode" class="w-[200px] h-[40px]"></svg>
+                            </div>
+                        </div>
+                        <div class="w-[40%] flex flex-col items-end pt-1">
+                            <div class="font-bold text-[15px] mb-2 pr-2">COD Cek Dulu: <span id="disp-cod">Tidak</span></div>
+                            <div id="qrcode" class="mr-4 mt-1"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Copyright fixed di layar -->
+        <div class="fixed bottom-2 w-full text-center text-gray-400 font-medium text-[11px] pointer-events-none z-0">
+            Made with <span class="text-red-500">&hearts;</span> ardhrm
+        </div>
+    </div>
+
+    <script>
+        // Mapping Input to Display elements
+        const updateMap = {
+            'in-resi': [
+                'disp-resi-atas1', 'disp-resi-atas2', 'disp-resi-atas3', 
+                'disp-resi-kiri', 'disp-resi-kanan', 'disp-resi-bawah-barcode',
+                'disp-resi-kiri-bawah', 'disp-resi-kanan-bawah'
+            ],
+            'in-layanan': ['disp-layanan'],
+            'in-rute': ['disp-rute'],
+            'in-wilayah': ['disp-wilayah'],
+            'in-penerima-nama': ['disp-penerima-nama'],
+            'in-tipe-alamat': ['disp-tipe-alamat'],
+            'in-penerima-alamat': ['disp-penerima-alamat'],
+            'in-pengirim-nama': ['disp-pengirim-nama'],
+            'in-pengirim-telp': ['disp-pengirim-telp'],
+            'in-pengirim-kota': ['disp-pengirim-kota'],
+            'in-blok': ['disp-blok'],
+            'in-kab': ['disp-kab'],
+            'in-kec': ['disp-kec'],
+            'in-kanan': ['disp-kanan'],
+            'in-berat': ['disp-berat'],
+            'in-batas': ['disp-batas'],
+            'in-pesanan': ['disp-pesanan'],
+            'in-cod': ['disp-cod']
+        };
+
+        let qrcodeInstance = null;
+
+        function renderBarcodes() {
+            const resi = document.getElementById('in-resi').value;
+            const pesanan = document.getElementById('in-pesanan').value;
+
+            // Update Teks Resi
+            document.getElementById('disp-resi-teks').textContent = 'Resi: ' + resi;
+
+            // Generate Main Barcode (Resi)
+            try {
+                JsBarcode("#main-barcode", resi, {
+                    format: "CODE128",
+                    displayValue: false,
+                    height: 50,
+                    margin: 0,
+                    width: 2.2
+                });
+            } catch (e) { console.error(e); }
+
+            // Generate Small Barcode (Pesanan)
+            try {
+                JsBarcode("#small-barcode", pesanan, {
+                    format: "CODE128",
+                    displayValue: false,
+                    height: 25,
+                    margin: 0,
+                    width: 1.5
+                });
+            } catch (e) { console.error(e); }
+
+            // Generate QR Code (Resi)
+            const qrContainer = document.getElementById("qrcode");
+            qrContainer.innerHTML = ""; // Clear existing
+            try {
+                if (typeof QRCode !== 'undefined') {
+                    qrcodeInstance = new QRCode(qrContainer, {
+                        text: resi,
+                        width: 75,
+                        height: 75,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.M
+                    });
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        // Attach event listeners to inputs
+        Object.keys(updateMap).forEach(inputId => {
+            const el = document.getElementById(inputId);
+            if(el) {
+                el.addEventListener('input', (e) => {
+                    const val = e.target.value;
+                    updateMap[inputId].forEach(dispId => {
+                        const dispEl = document.getElementById(dispId);
+                        if(dispEl) dispEl.textContent = val;
+                    });
+                    
+                    // Trigger barcode redraw if Resi or Pesanan changes
+                    if(inputId === 'in-resi' || inputId === 'in-pesanan') {
+                        renderBarcodes();
+                    }
+                });
+            }
+        });
+
+        // ==========================================
+        // FITUR KANVAS (DRAG & ZOOM & BACKGROUND)
+        // ==========================================
+        
+        const wrapper = document.getElementById('resi-wrapper');
+        const canvasContainer = document.getElementById('canvas-container');
+        const zoomInput = document.getElementById('in-zoom');
+        const bgInput = document.getElementById('in-bg');
+        const btnReset = document.getElementById('btn-reset');
+
+        let isDragging = false;
+        let startX, startY;
+        let currentTranslateX = -50; // default CSS translate -50%
+        let currentTranslateY = -50; 
+        let currentScale = 1;
+
+        function updateTransform() {
+            wrapper.style.transform = `translate(calc(-50% + ${currentTranslateX}px), calc(-50% + ${currentTranslateY}px)) scale(${currentScale})`;
+        }
+
+        // --- Zooming ---
+        zoomInput.addEventListener('input', (e) => {
+            currentScale = e.target.value;
+            updateTransform();
+        });
+
+        // --- Dragging Logic ---
+        wrapper.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX - currentTranslateX;
+            startY = e.clientY - currentTranslateY;
+            canvasContainer.style.cursor = 'grabbing';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            currentTranslateX = e.clientX - startX;
+            currentTranslateY = e.clientY - startY;
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+            canvasContainer.style.cursor = 'grab';
+        });
+
+        // Touch support untuk HP
+        wrapper.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            const touch = e.touches[0];
+            startX = touch.clientX - currentTranslateX;
+            startY = touch.clientY - currentTranslateY;
+        }, {passive: true});
+
+        window.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const touch = e.touches[0];
+            currentTranslateX = touch.clientX - startX;
+            currentTranslateY = touch.clientY - startY;
+            updateTransform();
+        }, {passive: true});
+
+        window.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        // --- Reset Button ---
+        btnReset.addEventListener('click', () => {
+            currentTranslateX = 0;
+            currentTranslateY = 0;
+            currentScale = 1;
+            zoomInput.value = 1;
+            updateTransform();
+            
+            // Reset Background
+            canvasContainer.style.backgroundImage = 'none';
+            bgInput.value = '';
+        });
+
+        // --- Upload Background ---
+        bgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    canvasContainer.style.backgroundImage = `url(${event.target.result})`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Initial render
+        window.onload = () => {
+            setTimeout(renderBarcodes, 500); // slight delay to ensure fonts/libs loaded
+            
+            // force setup text for all default values
+            Object.keys(updateMap).forEach(inputId => {
+                const el = document.getElementById(inputId);
+                if(el) {
+                    updateMap[inputId].forEach(dispId => {
+                        const dispEl = document.getElementById(dispId);
+                        if(dispEl) dispEl.textContent = el.value;
+                    });
+                }
+            });
+        };
+    </script>
+</body>
+</html>
